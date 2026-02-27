@@ -526,9 +526,58 @@ body {
   background: var(--text-muted);
 }
 
+/* Folder tree */
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  user-select: none;
+}
+
+.folder-row:hover {
+  background: var(--bg-hover);
+}
+
+.folder-row .folder-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-row svg:not(.chevron) {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+  transform: rotate(90deg);
+}
+
+.folder-item.collapsed > .folder-row .chevron {
+  transform: rotate(0deg);
+}
+
+.folder-children {
+  display: block;
+}
+
+.folder-item.collapsed > .folder-children {
+  display: none;
+}
+
 /* Drag & drop overlay */
 body.drag-over::after {
-  content: 'Déposer le fichier ici (.md, .rtf, .docx)';
+  content: 'Drop file here (.md, .rtf, .docx)';
   position: fixed;
   inset: 0;
   background: rgba(0, 120, 212, 0.9);

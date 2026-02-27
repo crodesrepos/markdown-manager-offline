@@ -71,25 +71,39 @@ ipcMain.handle('open-folder', async () => {
   return result.filePaths[0];
 });
 
-// List .md files in folder
+// Recursively build a file tree, only including folders that contain .md files
+function buildFileTree(dirPath) {
+  const items = fs.readdirSync(dirPath, { withFileTypes: true });
+  const mdFiles = [];
+  const folders = [];
+
+  for (const item of items) {
+    if (item.name.startsWith('.')) continue;
+
+    if (item.isFile() && item.name.endsWith('.md')) {
+      const filePath = path.join(dirPath, item.name);
+      const stats = fs.statSync(filePath);
+      mdFiles.push({ type: 'file', name: item.name, path: filePath, modified: stats.mtime });
+    } else if (item.isDirectory()) {
+      const subPath = path.join(dirPath, item.name);
+      try {
+        const children = buildFileTree(subPath);
+        if (children.length > 0) {
+          folders.push({ type: 'folder', name: item.name, path: subPath, children });
+        }
+      } catch (e) { /* skip unreadable dirs */ }
+    }
+  }
+
+  mdFiles.sort((a, b) => a.name.localeCompare(b.name));
+  folders.sort((a, b) => a.name.localeCompare(b.name));
+  return [...folders, ...mdFiles];
+}
+
+// List .md files in folder (recursive tree)
 ipcMain.handle('list-md-files', async (event, folderPath) => {
   try {
-    const files = fs.readdirSync(folderPath, { withFileTypes: true });
-    const mdFiles = [];
-    
-    for (const file of files) {
-      if (file.isFile() && file.name.endsWith('.md')) {
-        const filePath = path.join(folderPath, file.name);
-        const stats = fs.statSync(filePath);
-        mdFiles.push({
-          name: file.name,
-          path: filePath,
-          modified: stats.mtime
-        });
-      }
-    }
-    
-    return mdFiles.sort((a, b) => a.name.localeCompare(b.name));
+    return buildFileTree(folderPath);
   } catch (err) {
     console.error('Error listing files:', err);
     return [];
@@ -284,7 +298,7 @@ function convertRtfWithTextutil(rtfPath) {
       });
       return txt.trim();
     } catch (e) {
-      throw new Error('Conversion RTF échouée. Vérifiez que le fichier est valide.');
+      throw new Error('RTF conversion failed. Please check that the file is valid.');
     }
   }
 }

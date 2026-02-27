@@ -1,7 +1,8 @@
 // State
 let currentFolder = null;
 let currentFile = null;
-let files = [];
+let fileTree = [];
+let collapsedFolders = new Set();
 let saveTimeout = null;
 let hasUnsavedChanges = false;
 
@@ -105,10 +106,10 @@ function toggleEditor() {
   if (editorVisible) {
     editorPanel.classList.remove('hidden');
     editorPanel.style.flex = '1 1 50%';
-    btnToggleEditor.title = 'Masquer l\'éditeur (⌘E)';
+    btnToggleEditor.title = 'Hide editor (⌘E)';
   } else {
     editorPanel.classList.add('hidden');
-    btnToggleEditor.title = 'Afficher l\'éditeur (⌘E)';
+    btnToggleEditor.title = 'Show editor (⌘E)';
   }
 }
 
@@ -249,7 +250,7 @@ async function handleImportDrop(filePath) {
     await refreshFileList();
     await loadFile(result.path);
   } else {
-    alert(`Erreur lors de la conversion: ${result.error}`);
+    alert(`Conversion error: ${result.error}`);
   }
 }
 
@@ -285,40 +286,86 @@ async function openFolder() {
 // Refresh file list
 async function refreshFileList() {
   if (!currentFolder) return;
-  
-  files = await window.api.listMdFiles(currentFolder);
+
+  fileTree = await window.api.listMdFiles(currentFolder);
   renderFileList();
 }
 
 // Render file list
 function renderFileList() {
-  if (files.length === 0) {
+  if (fileTree.length === 0) {
     fileListEl.innerHTML = `
       <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">
-        Aucun fichier .md<br>
-        <span style="font-size: 11px;">Créez-en un ou importez un document</span>
+        No .md files<br>
+        <span style="font-size: 11px;">Create one or import a document</span>
       </div>
     `;
     return;
   }
 
-  fileListEl.innerHTML = files.map(file => `
-    <div class="file-item ${currentFile === file.path ? 'active' : ''}" data-path="${file.path}">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-      </svg>
-      <span class="file-name">${file.name}</span>
-      <button class="btn-delete" data-path="${file.path}" title="Supprimer">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-        </svg>
-      </button>
-    </div>
-  `).join('');
+  fileListEl.innerHTML = renderTree(fileTree, 0);
+  attachTreeListeners();
+}
 
-  // Add click listeners
+// Recursively render tree nodes into HTML
+function renderTree(nodes, depth) {
+  const indent = depth * 16;
+  return nodes.map(node => {
+    if (node.type === 'folder') {
+      const isCollapsed = collapsedFolders.has(node.path);
+      return `
+        <div class="folder-item ${isCollapsed ? 'collapsed' : ''}" data-path="${node.path}">
+          <div class="folder-row" style="padding-left: ${12 + indent}px">
+            <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span class="folder-name">${node.name}</span>
+          </div>
+          <div class="folder-children">
+            ${renderTree(node.children, depth + 1)}
+          </div>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="file-item ${currentFile === node.path ? 'active' : ''}" data-path="${node.path}" style="padding-left: ${12 + indent}px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span class="file-name">${node.name}</span>
+          <button class="btn-delete" data-path="${node.path}" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
+      `;
+    }
+  }).join('');
+}
+
+// Attach event listeners after rendering the tree
+function attachTreeListeners() {
+  // Folder toggle
+  fileListEl.querySelectorAll('.folder-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const folderItem = row.closest('.folder-item');
+      const folderPath = folderItem.dataset.path;
+      if (collapsedFolders.has(folderPath)) {
+        collapsedFolders.delete(folderPath);
+      } else {
+        collapsedFolders.add(folderPath);
+      }
+      renderFileList();
+    });
+  });
+
+  // File click
   fileListEl.querySelectorAll('.file-item').forEach(item => {
     item.addEventListener('click', (e) => {
       if (!e.target.closest('.btn-delete')) {
@@ -327,6 +374,7 @@ function renderFileList() {
     });
   });
 
+  // Delete button
   fileListEl.querySelectorAll('.btn-delete').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -362,7 +410,7 @@ async function saveCurrentFile() {
   const success = await window.api.saveFile(currentFile, editor.value);
   if (success) {
     hasUnsavedChanges = false;
-    saveStatus.textContent = 'Enregistré ✓';
+    saveStatus.textContent = 'Saved ✓';
     setTimeout(() => {
       if (!hasUnsavedChanges) saveStatus.textContent = '';
     }, 2000);
@@ -372,7 +420,7 @@ async function saveCurrentFile() {
 // Editor change handler
 function onEditorChange() {
   hasUnsavedChanges = true;
-  saveStatus.textContent = 'Non enregistré...';
+  saveStatus.textContent = 'Unsaved...';
   
   // Update preview
   updatePreview(editor.value);
@@ -387,7 +435,7 @@ function updatePreview(content) {
   if (!content.trim()) {
     preview.innerHTML = `
       <div class="empty-state">
-        <p>Commencez à écrire...</p>
+        <p>Start writing...</p>
       </div>
     `;
     return;
@@ -417,14 +465,14 @@ async function createNewFile() {
     await refreshFileList();
     await loadFile(result.path);
   } else {
-    alert(`Erreur: ${result.error}`);
+    alert(`Error: ${result.error}`);
   }
 }
 
 // Delete file
 async function deleteFile(filePath) {
   const fileName = filePath.split('/').pop();
-  if (!confirm(`Supprimer "${fileName}" ?`)) return;
+  if (!confirm(`Delete "${fileName}"?`)) return;
   
   const success = await window.api.deleteFile(filePath);
   if (success) {
@@ -441,7 +489,7 @@ async function deleteFile(filePath) {
             <line x1="16" y1="17" x2="8" y2="17"/>
             <polyline points="10 9 9 9 8 9"/>
           </svg>
-          <p>Sélectionnez un fichier .md<br>ou importez un document</p>
+          <p>Select a .md file<br>or import a document</p>
         </div>
       `;
     }
@@ -466,6 +514,6 @@ async function importFile() {
     await refreshFileList();
     await loadFile(result.path);
   } else {
-    alert(`Erreur lors de l'import: ${result.error}`);
+    alert(`Import error: ${result.error}`);
   }
 }
