@@ -577,7 +577,7 @@ body {
 
 /* Drag & drop overlay */
 body.drag-over::after {
-  content: 'Drop file here (.md, .rtf, .docx)';
+  content: 'Drop folder or file here (.md, .rtf, .docx)';
   position: fixed;
   inset: 0;
   background: rgba(0, 120, 212, 0.9);

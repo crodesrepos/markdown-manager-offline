@@ -215,25 +215,40 @@ function setupDragAndDrop() {
 
   // Handle drop
   body.addEventListener('drop', async (e) => {
-    const files = Array.from(e.dataTransfer.files);
-    
-    for (const file of files) {
-      const filePath = file.path;
-      if (!filePath) continue;
-      
-      const ext = filePath.split('.').pop().toLowerCase();
-      
-      if (ext === 'md' || ext === 'markdown') {
-        // Open .md file directly
-        await handleExternalFileOpen(filePath);
+    const items = Array.from(e.dataTransfer.items);
+
+    for (const item of items) {
+      if (item.kind !== 'file') continue;
+
+      const entry = item.webkitGetAsEntry();
+      const file = item.getAsFile();
+      if (!file || !file.path) continue;
+
+      if (entry && entry.isDirectory) {
+        // Dropped a folder — open it as the current workspace
+        await openFolderByPath(file.path);
         break;
-      } else if (ext === 'rtf' || ext === 'docx') {
-        // Convert and open .rtf or .docx
-        await handleImportDrop(filePath);
-        break;
+      } else {
+        const ext = file.path.split('.').pop().toLowerCase();
+        if (ext === 'md' || ext === 'markdown') {
+          await handleExternalFileOpen(file.path);
+          break;
+        } else if (ext === 'rtf' || ext === 'docx') {
+          await handleImportDrop(file.path);
+          break;
+        }
       }
     }
   });
+}
+
+// Open a folder by path directly (e.g. from drag & drop)
+async function openFolderByPath(folderPath) {
+  currentFolder = folderPath;
+  folderPathEl.innerHTML = `<span title="${folderPath}">${folderPath.split('/').pop()}</span>`;
+  btnNewFile.disabled = false;
+  btnImport.disabled = false;
+  await refreshFileList();
 }
 
 // Handle dropped .rtf or .docx file
